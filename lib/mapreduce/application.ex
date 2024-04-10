@@ -29,4 +29,9 @@ defmodule Mapreduce.Application do
     children = [coordinator_child | worker_children]
     Supervisor.start_link(children, strategy: :one_for_one, name: Mapreduce.Supervisor)
   end
+
+  @impl true
+  def stop(_) do
+    IO.puts("Stopped?")
+  end
 end
