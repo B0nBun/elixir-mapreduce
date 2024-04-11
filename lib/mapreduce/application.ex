@@ -1,12 +1,14 @@
 defmodule Mapreduce.Application do
   use Application
 
+  @spec map(String.t(), File.Stream.t()) :: list({String.t(), String.t()})
   defp map(_filename, stream) do
     stream
     |> Enum.flat_map(&String.split(&1))
     |> Enum.map(fn w -> {w, "1"} end)
   end
 
+  @spec reduce(String.t(), list(String.t())) :: String.t()
   defp reduce(_key, values) do
     values
     |> length()
@@ -38,10 +40,5 @@ defmodule Mapreduce.Application do
 
     children = [coordinator_child | worker_children]
     Supervisor.start_link(children, strategy: :one_for_one, name: Mapreduce.Supervisor)
-  end
-
-  @impl true
-  def stop(_) do
-    IO.puts("Stopped?")
   end
 end

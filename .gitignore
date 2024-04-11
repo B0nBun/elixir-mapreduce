@@ -26,3 +26,4 @@ mapreduce-*.tar
 /tmp/
 
 /.elixir_ls
+mr-*

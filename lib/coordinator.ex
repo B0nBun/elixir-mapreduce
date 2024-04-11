@@ -1,9 +1,23 @@
 defmodule MapTask do
   defstruct status: :idle, id: 0, filename: ""
+
+  @type status :: Coordinator.task_status()
+  @type t :: %MapTask{
+          status: Coordinator.task_status(),
+          id: Coordinator.task_id(),
+          filename: String.t()
+        }
 end
 
 defmodule ReduceTask do
   defstruct status: :idle, id: 0, reduce_idx: 0
+
+  @type status :: Coordinator.task_status()
+  @type t :: %ReduceTask{
+          status: Coordinator.task_status(),
+          id: Coordinator.task_id(),
+          reduce_idx: integer()
+        }
 end
 
 defmodule Coordinator do
@@ -14,11 +28,18 @@ defmodule Coordinator do
 
   defstruct tasks: [], reduce_num: 0, next_id: 1
 
+  @type task_id() :: integer()
+  @type task_status() :: :idle | :progress | :complete
+  @type task() :: ReduceTask.t() | MapTask.t()
+  @type t() :: %Coordinator{tasks: list(task()), reduce_num: integer(), next_id: task_id()}
+
+  @spec start_link(GenServer.name(), list(String.t())) :: GenServer.on_start()
   def start_link(name, files) do
     GenServer.start_link(__MODULE__, files, name: name)
   end
 
   @impl true
+  @spec init(String.t()) :: {:ok, %Coordinator{}}
   def init(files) do
     coordinator = %Coordinator{}
     coordinator = with_map_tasks(coordinator, files)
@@ -27,7 +48,14 @@ defmodule Coordinator do
     {:ok, coordinator}
   end
 
+  @type get_task_reply() ::
+          {:map, task_id(), String.t(), integer()}
+          | {:reduce, task_id(), integer()}
+          | {:no_task}
+
   @impl true
+  @spec handle_call(:get_task, any(), Coordinator.t()) ::
+          {:reply, get_task_reply(), Coordinator.t()}
   def handle_call(:get_task, _from, coordinator) do
     idle_map = Enum.find(coordinator.tasks, &(is_map_task(&1) and &1.status == :idle))
     idle_reduce = Enum.find(coordinator.tasks, &(is_reduce_task(&1) and &1.status == :idle))
@@ -73,6 +101,8 @@ defmodule Coordinator do
   end
 
   @impl true
+  @spec handle_call({:get_task, task_id()}, any(), Coordinator.t()) ::
+          {:reply, :ok, Coordinator.t()}
   def handle_call({:complete_task, task_id}, _from, coordinator) do
     Logger.info("Coordinator: Completed task (id=#{task_id})")
     completed_task = Enum.find(coordinator.tasks, &(task_id == &1.id))
@@ -98,6 +128,7 @@ defmodule Coordinator do
   end
 
   @impl true
+  @spec handle_call(:done?, any(), Coordinator.t()) :: {:reply, boolean(), Coordinator.t()}
   def handle_call(:done?, _from, coordinator) do
     done? = Enum.all?(coordinator.tasks, &(&1.status == :complete))
 
@@ -110,6 +141,8 @@ defmodule Coordinator do
   end
 
   @impl true
+  @spec handle_info({:check_task_completed, task_id()}, Coordinator.t()) ::
+          {:noreply, Coordinator.t()}
   def handle_info({:check_task_completed, task_id}, coordinator) do
     to_check = Enum.find(coordinator.tasks, &(&1.id == task_id))
 
@@ -131,23 +164,28 @@ defmodule Coordinator do
   end
 
   @impl true
+  @spec handle_info(:stop, Coordinator.t()) :: {:stop, :shutdown, Coordinator.t()}
   def handle_info(:stop, coordinator) do
     Logger.info("Coordinator: Recieved handle_info(:stop), stopping")
     {:stop, :shutdown, coordinator}
   end
 
+  @spec get_task(GenServer.name()) :: get_task_reply()
   def get_task(server) do
     GenServer.call(server, :get_task)
   end
 
+  @spec complete_task(GenServer.name(), task_id()) :: :ok
   def complete_task(server, task_id) do
     GenServer.call(server, {:complete_task, task_id})
   end
 
+  @spec done?(GenServer.name()) :: boolean()
   def done?(server) do
     GenServer.call(server, :done?)
   end
 
+  @spec with_map_tasks(Coordinator.t(), list(String.t())) :: Coordinator.t()
   defp with_map_tasks(coordinator, files) do
     map_tasks =
       Enum.map(Enum.with_index(files), fn {file, idx} ->
@@ -165,6 +203,7 @@ defmodule Coordinator do
     }
   end
 
+  @spec with_reduce_tasks(Coordinator.t()) :: Coordinator.t()
   defp with_reduce_tasks(coordinator) do
     reduce_tasks =
       Enum.map(1..coordinator.reduce_num, fn num ->
@@ -182,12 +221,15 @@ defmodule Coordinator do
     }
   end
 
+  @spec is_map_task(task()) :: boolean
   defp is_map_task(%MapTask{}), do: true
   defp is_map_task(_), do: false
 
+  @spec is_reduce_task(task()) :: boolean
   defp is_reduce_task(%ReduceTask{}), do: true
   defp is_reduce_task(_), do: false
 
+  @spec set_task_status(list(task()), task_id(), task_status()) :: list(task())
   defp set_task_status(tasks, task_id, new_status) do
     Enum.map(tasks, fn task ->
       case task do

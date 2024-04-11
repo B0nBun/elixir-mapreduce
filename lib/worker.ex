@@ -3,12 +3,17 @@
 defmodule Worker do
   require Logger
 
+  @type mapf :: (String.t(), File.Stream.t() -> list({String.t(), String.t()}))
+  @type reducef :: (String.t(), list(String.t()) -> String.t())
+
+  @spec start_link(GenServer.name(), mapf(), reducef()) :: {:ok, pid()}
   def start_link(coordinator_server, map, reduce) do
     Logger.info("Worker: Spawned link")
     pid = spawn_link(fn -> loop(coordinator_server, map, reduce) end)
     {:ok, pid}
   end
 
+  @spec loop(GenServer.name(), mapf(), reducef()) :: :ok
   def loop(server, map, reduce) do
     Logger.info("Worker: probing coordinator for tasks")
     reply = Coordinator.get_task(server)
@@ -26,11 +31,13 @@ defmodule Worker do
 
     if Coordinator.done?(server) do
       Logger.info("Worker: Recieved done?=true, exiting")
+      :ok
     else
       loop(server, map, reduce)
     end
   end
 
+  @spec handle_map(GenServer.name(), mapf(), Coordinator.task_id(), String.t(), integer()) :: :ok
   defp handle_map(server, map, task_id, filename, reduce_num) do
     Logger.info("Worker: Handling map task (id=#{task_id})")
     stream = File.stream!(filename)
@@ -47,6 +54,7 @@ defmodule Worker do
     Coordinator.complete_task(server, task_id)
   end
 
+  @spec handle_reduce(GenServer.name(), reducef(), Coordinator.task_id(), integer()) :: :ok
   defp handle_reduce(server, reduce, task_id, reduce_idx) do
     Logger.info("Worker: Handling reduce task (id=#{task_id})")
     files = files_with_map_results(reduce_idx)
@@ -72,6 +80,9 @@ defmodule Worker do
     Coordinator.complete_task(server, task_id)
   end
 
+  @spec split_into_buckets(list({String.t(), String.t()}), integer()) :: %{
+          integer() => list({String.t(), String.t()})
+        }
   defp split_into_buckets(pairs, reduce_num) do
     buckets =
       List.duplicate([], reduce_num)
@@ -88,30 +99,37 @@ defmodule Worker do
     buckets
   end
 
+  @spec bucket_hash(String.t()) :: integer()
   defp bucket_hash(key) do
     bits = :crypto.hash(:md5, key)
     <<number::32, _::binary>> = bits
     number
   end
 
+  @spec file_for_map_result(integer(), Coordinator.task_id()) :: String.t()
   defp file_for_map_result(reduce_idx, task_id) do
     "mr-map-inter-#{reduce_idx}-#{task_id}"
   end
 
+  @spec files_with_map_results(Coordinator.task_id()) :: String.t()
   defp files_with_map_results(reduce_idx) do
     Path.wildcard("mr-map-inter-#{reduce_idx}-*")
   end
 
+  @spec write_pairs_to_file(list({String.t(), String.t()}), String.t()) ::
+          :ok | {:error, File.posix()}
   defp write_pairs_to_file(pairs, file) do
     binary = :erlang.term_to_binary(pairs)
     File.write(file, binary)
   end
 
+  @spec read_pairs_from_file!(String.t()) :: list({String.t(), String.t()})
   defp read_pairs_from_file!(file) do
-    # TODO: Maybe can read with File.stream
     File.read!(file) |> :erlang.binary_to_term()
   end
 
+  @spec flatten_pairs(list(list({String.t(), String.t()}))) ::
+          list({String.t(), list(String.t())})
   defp flatten_pairs(lists_of_pairs) do
     lists_of_pairs
     |> Enum.flat_map(& &1)
