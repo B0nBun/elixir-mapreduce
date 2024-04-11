@@ -34,7 +34,7 @@ defmodule Coordinator do
 
     reply =
       cond do
-        idle_map != nil -> {:map, idle_map.id, idle_map.filename}
+        idle_map != nil -> {:map, idle_map.id, idle_map.filename, coordinator.reduce_num}
         idle_reduce != nil -> {:reduce, idle_reduce.id, idle_reduce.reduce_idx}
         true -> {:no_task}
       end

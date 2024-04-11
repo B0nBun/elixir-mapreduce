@@ -1,14 +1,21 @@
 defmodule Mapreduce.Application do
   use Application
 
+  defp map(_filename, stream) do
+    stream
+    |> Enum.flat_map(&String.split(&1))
+    |> Enum.map(fn w -> {w, "1"} end)
+  end
+
+  defp reduce(_key, values) do
+    values
+    |> length()
+    |> Integer.to_string()
+  end
+
   @impl true
   def start(_type, _args) do
-    files = [
-      "non-existant-1.txt",
-      "non-existant-2.txt",
-      "non-existant-3.txt",
-      "non-existant-4.txt"
-    ]
+    files = Path.wildcard("texts/*.txt")
 
     coordinator_child = %{
       id: Coordinator,
@@ -16,12 +23,15 @@ defmodule Mapreduce.Application do
       restart: :transient
     }
 
+    map_lambda = &map(&1, &2)
+    reduce_lambda = &reduce(&1, &2)
+
     worker_children =
       Enum.map(
-        0..4,
+        0..1,
         &%{
           id: {Worker, &1},
-          start: {Worker, :start_link, [{:global, :coordinator}]},
+          start: {Worker, :start_link, [{:global, :coordinator}, map_lambda, reduce_lambda]},
           restart: :transient
         }
       )
