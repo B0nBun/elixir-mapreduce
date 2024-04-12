@@ -17,28 +17,12 @@ defmodule Mapreduce.Application do
 
   @impl true
   def start(_type, _args) do
-    files = Path.wildcard("texts/*.txt")
-
-    coordinator_child = %{
-      id: Coordinator,
-      start: {Coordinator, :start_link, [{:global, :coordinator}, files]},
-      restart: :transient
-    }
-
-    map_lambda = &map(&1, &2)
-    reduce_lambda = &reduce(&1, &2)
-
-    worker_children =
-      Enum.map(
-        0..1,
-        &%{
-          id: {Worker, &1},
-          start: {Worker, :start_link, [{:global, :coordinator}, map_lambda, reduce_lambda]},
-          restart: :transient
-        }
-      )
-
-    children = [coordinator_child | worker_children]
-    Supervisor.start_link(children, strategy: :one_for_one, name: Mapreduce.Supervisor)
+    Mapreduce.under_supervisor(
+      Path.wildcard("texts/*.txt"),
+      &map(&1, &2),
+      &reduce(&1, &2),
+      workers_num: 5,
+      name: Mapreduce.Application.Supervisor
+    )
   end
 end

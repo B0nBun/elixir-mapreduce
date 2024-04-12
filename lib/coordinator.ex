@@ -113,7 +113,8 @@ defmodule Coordinator do
     }
 
     all_maps_complete =
-      Enum.filter(coordinator.tasks, &is_map_task(&1))
+      coordinator.tasks
+      |> Enum.filter(&is_map_task(&1))
       |> Enum.all?(&(&1.status == :complete))
 
     coordinator =
@@ -188,10 +189,12 @@ defmodule Coordinator do
   @spec with_map_tasks(Coordinator.t(), list(String.t())) :: Coordinator.t()
   defp with_map_tasks(coordinator, files) do
     map_tasks =
-      Enum.map(Enum.with_index(files), fn {file, idx} ->
+      files
+      |> Enum.with_index(coordinator.next_id)
+      |> Enum.map(fn {file, id} ->
         %MapTask{
           status: :idle,
-          id: coordinator.next_id + idx,
+          id: id,
           filename: file
         }
       end)
@@ -206,7 +209,8 @@ defmodule Coordinator do
   @spec with_reduce_tasks(Coordinator.t()) :: Coordinator.t()
   defp with_reduce_tasks(coordinator) do
     reduce_tasks =
-      Enum.map(1..coordinator.reduce_num, fn num ->
+      1..coordinator.reduce_num
+      |> Enum.map(fn num ->
         %ReduceTask{
           status: :idle,
           id: coordinator.next_id + num - 1,

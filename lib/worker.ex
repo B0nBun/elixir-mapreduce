@@ -1,5 +1,4 @@
-# TODO: Actually do the work
-
+# TODO: Remove intermediate files
 defmodule Worker do
   require Logger
 
@@ -69,15 +68,22 @@ defmodule Worker do
     File.touch!(outfile)
     {:ok, file} = File.open(outfile, [:write])
 
-    Enum.each(pairs, fn {key, values} ->
-      output = reduce.(key, values)
-      IO.binwrite(file, "#{key} #{output}\n")
-    end)
+    pairs
+    |> Enum.map(fn {key, values} -> {key, reduce.(key, values)}end)
+    |> write_result_to_file(file)
 
     File.close(file)
 
     Logger.info("Worker: Completed reduce task (id=#{task_id})")
     Coordinator.complete_task(server, task_id)
+  end
+
+  @spec write_result_to_file(list({String.t(), String.t()}), File.io_device()) :: :ok
+  def write_result_to_file(pairs, file) do
+    Enum.each(pairs, fn {key, value} ->
+      IO.binwrite(file, "#{key} #{value}\n")
+    end)
+    :ok
   end
 
   @spec split_into_buckets(list({String.t(), String.t()}), integer()) :: %{
