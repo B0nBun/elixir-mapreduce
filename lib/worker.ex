@@ -39,14 +39,17 @@ defmodule Worker do
   @spec handle_map(GenServer.name(), mapf(), Coordinator.task_id(), String.t(), integer()) :: :ok
   defp handle_map(server, map, task_id, filename, reduce_num) do
     Logger.info("Worker: Handling map task (id=#{task_id})")
-    file = File.open!(filename)
+    file = Coordinator.file_open(server, filename, [:read])
     map_pairs = map.(filename, file)
+    Coordinator.file_close(server, file)
     buckets = split_into_buckets(map_pairs, reduce_num)
 
     buckets
     |> Enum.each(fn {reduce_idx, pairs} ->
-      outfile = file_for_map_result(reduce_idx, task_id)
-      write_pairs_to_file(pairs, outfile)
+      filename = file_for_map_result(reduce_idx, task_id)
+      file = Coordinator.file_open(server, filename, [:write])
+      write_pairs(pairs, file)
+      Coordinator.file_close(server, file)
     end)
 
     Logger.info("Worker: Completed map task (id=#{task_id})")
@@ -56,23 +59,27 @@ defmodule Worker do
   @spec handle_reduce(GenServer.name(), reducef(), Coordinator.task_id(), integer()) :: :ok
   defp handle_reduce(server, reduce, task_id, reduce_idx) do
     Logger.info("Worker: Handling reduce task (id=#{task_id})")
-    files = files_with_map_results(reduce_idx)
+    filenames = files_with_map_results(reduce_idx)
 
     # TODO: This can be optimized by sorting by key
     pairs =
-      files
-      |> Enum.map(&read_pairs_from_file!(&1))
+      filenames
+      |> Enum.map(fn filename ->
+        file = Coordinator.file_open(server, filename, [:read])
+        pairs = read_pairs(file)
+        Coordinator.file_close(server, file)
+        pairs
+      end)
       |> flatten_pairs()
 
     outfile = "mr-out-#{reduce_idx}"
-    File.touch!(outfile)
-    {:ok, file} = File.open(outfile, [:write])
+    file = Coordinator.file_open(server, outfile, [:write])
 
     pairs
     |> Enum.map(fn {key, values} -> {key, reduce.(key, values)}end)
     |> write_result_to_file(file)
 
-    File.close(file)
+    Coordinator.file_close(server, file)
 
     Logger.info("Worker: Completed reduce task (id=#{task_id})")
     Coordinator.complete_task(server, task_id)
@@ -122,16 +129,15 @@ defmodule Worker do
     Path.wildcard("mr-map-inter-#{reduce_idx}-*")
   end
 
-  @spec write_pairs_to_file(list({String.t(), String.t()}), String.t()) ::
-          :ok | {:error, File.posix()}
-  defp write_pairs_to_file(pairs, file) do
+  @spec write_pairs(list({String.t(), String.t()}), File.io_device()) :: :ok
+  def write_pairs(pairs, file) do
     binary = :erlang.term_to_binary(pairs)
-    File.write(file, binary)
+    IO.binwrite(file, binary)
   end
 
-  @spec read_pairs_from_file!(String.t()) :: list({String.t(), String.t()})
-  defp read_pairs_from_file!(file) do
-    File.read!(file) |> :erlang.binary_to_term()
+  @spec read_pairs(File.io_device()) :: list({String.t(), String.t()})
+  def read_pairs(file) do
+    IO.binread(file, :all) |> :erlang.binary_to_term()
   end
 
   @spec flatten_pairs(list(list({String.t(), String.t()}))) ::

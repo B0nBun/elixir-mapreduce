@@ -142,6 +142,20 @@ defmodule Coordinator do
   end
 
   @impl true
+  @spec handle_call({:file_open, String.t(), list(File.mode())}, any(), Coordinator.t()) :: {:reply, File.io_device(), Coordinator.t()}
+  def handle_call({:file_open, filename, modes}, _from, coordinator) do
+    file = File.open!(filename, modes)
+    {:reply, file, coordinator}
+  end
+
+  @impl true
+  @spec handle_call({:file_close, File.io_device()}, any(), Coordinator.t()) :: {:reply, :ok, Coordinator.t()}
+  def handle_call({:file_close, file}, _from, coordinator) do
+    File.close(file)
+    {:reply, :ok, coordinator}
+  end
+
+  @impl true
   @spec handle_info({:check_task_completed, task_id()}, Coordinator.t()) ::
           {:noreply, Coordinator.t()}
   def handle_info({:check_task_completed, task_id}, coordinator) do
@@ -184,6 +198,16 @@ defmodule Coordinator do
   @spec done?(GenServer.name()) :: boolean()
   def done?(server) do
     GenServer.call(server, :done?)
+  end
+
+  @spec file_open(GenServer.name(), String.t(), list(File.mode())) :: File.io_device()
+  def file_open(server, filename, modes) do
+    GenServer.call(server, {:file_open, filename, modes})
+  end
+
+  @spec file_close(GenServer.name(), File.io_device()) :: :ok
+  def file_close(server, file) do
+    GenServer.call(server, {:file_close, file})
   end
 
   @spec with_map_tasks(Coordinator.t(), list(String.t())) :: Coordinator.t()
