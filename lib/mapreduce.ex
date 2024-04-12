@@ -5,7 +5,7 @@ defmodule Mapreduce do
     {:ok, file} = File.open(outfile, [:write])
 
     files
-    |> Enum.flat_map(fn file -> map.(file, File.stream!(file)) end)
+    |> Enum.flat_map(fn file -> map.(file, File.open!(file)) end)
     |> Enum.reduce(%{}, fn {k, v}, map -> Map.put(map, k, [v | Map.get(map, k, [])]) end)
     |> Enum.map(fn {k, values} -> {k, reduce.(k, values)} end)
     |> Worker.write_result_to_file(file)

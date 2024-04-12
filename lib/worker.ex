@@ -2,7 +2,7 @@
 defmodule Worker do
   require Logger
 
-  @type mapf :: (String.t(), File.Stream.t() -> list({String.t(), String.t()}))
+  @type mapf :: (String.t(), File.io_device() -> list({String.t(), String.t()}))
   @type reducef :: (String.t(), list(String.t()) -> String.t())
 
   @spec start_link(GenServer.name(), mapf(), reducef()) :: {:ok, pid()}
@@ -39,8 +39,8 @@ defmodule Worker do
   @spec handle_map(GenServer.name(), mapf(), Coordinator.task_id(), String.t(), integer()) :: :ok
   defp handle_map(server, map, task_id, filename, reduce_num) do
     Logger.info("Worker: Handling map task (id=#{task_id})")
-    stream = File.stream!(filename)
-    map_pairs = map.(filename, stream)
+    file = File.open!(filename)
+    map_pairs = map.(filename, file)
     buckets = split_into_buckets(map_pairs, reduce_num)
 
     buckets
