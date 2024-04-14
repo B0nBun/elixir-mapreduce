@@ -156,6 +156,12 @@ defmodule Coordinator do
   end
 
   @impl true
+  @spec handle_call({:map_results_filenames, integer()}, any(), Coordinator.t()) :: {:reply, list(String.t()), Coordinator.t()}
+  def handle_call({:map_results_filenames, reduce_idx}, _from, coordinator) do
+    {:reply, Path.wildcard("mr-map-inter-#{reduce_idx}-*"), coordinator}
+  end
+
+  @impl true
   @spec handle_info({:check_task_completed, task_id()}, Coordinator.t()) ::
           {:noreply, Coordinator.t()}
   def handle_info({:check_task_completed, task_id}, coordinator) do
@@ -208,6 +214,21 @@ defmodule Coordinator do
   @spec file_close(GenServer.name(), File.io_device()) :: :ok
   def file_close(server, file) do
     GenServer.call(server, {:file_close, file})
+  end
+
+  @spec filenames_with_map_results(GenServer.name(), integer()) :: String.t()
+  def filenames_with_map_results(server, reduce_idx) do
+    GenServer.call(server, {:map_results_filenames, reduce_idx})
+  end
+
+  @spec filename_for_map_result(integer(), Coordinator.task_id()) :: String.t()
+  def filename_for_map_result(reduce_idx, task_id) do
+    "mr-map-inter-#{reduce_idx}-#{task_id}"
+  end
+
+  @spec file_for_output(integer()) :: String.t()
+  def file_for_output(reduce_idx) do
+    "mr-out-#{reduce_idx}"
   end
 
   @spec with_map_tasks(Coordinator.t(), list(String.t())) :: Coordinator.t()

@@ -1,4 +1,3 @@
-# TODO: Remove intermediate files
 defmodule Worker do
   require Logger
 
@@ -40,13 +39,13 @@ defmodule Worker do
   defp handle_map(server, map, task_id, filename, reduce_num) do
     Logger.info("Worker: Handling map task (id=#{task_id})")
     file = Coordinator.file_open(server, filename, [:read])
-    map_pairs = map.(filename, file)
+    map_pairs = map.(filename, IO.stream(file, :line))
     Coordinator.file_close(server, file)
     buckets = split_into_buckets(map_pairs, reduce_num)
 
     buckets
     |> Enum.each(fn {reduce_idx, pairs} ->
-      filename = file_for_map_result(reduce_idx, task_id)
+      filename = Coordinator.filename_for_map_result(reduce_idx, task_id)
       file = Coordinator.file_open(server, filename, [:write])
       write_pairs(pairs, file)
       Coordinator.file_close(server, file)
@@ -59,7 +58,7 @@ defmodule Worker do
   @spec handle_reduce(GenServer.name(), reducef(), Coordinator.task_id(), integer()) :: :ok
   defp handle_reduce(server, reduce, task_id, reduce_idx) do
     Logger.info("Worker: Handling reduce task (id=#{task_id})")
-    filenames = files_with_map_results(reduce_idx)
+    filenames = Coordinator.filenames_with_map_results(server, reduce_idx)
 
     # TODO: This can be optimized by sorting by key
     pairs =
@@ -72,7 +71,7 @@ defmodule Worker do
       end)
       |> flatten_pairs()
 
-    outfile = "mr-out-#{reduce_idx}"
+    outfile = Coordinator.file_for_output(reduce_idx)
     file = Coordinator.file_open(server, outfile, [:write])
 
     pairs
@@ -117,16 +116,6 @@ defmodule Worker do
     bits = :crypto.hash(:md5, key)
     <<number::32, _::binary>> = bits
     number
-  end
-
-  @spec file_for_map_result(integer(), Coordinator.task_id()) :: String.t()
-  defp file_for_map_result(reduce_idx, task_id) do
-    "mr-map-inter-#{reduce_idx}-#{task_id}"
-  end
-
-  @spec files_with_map_results(Coordinator.task_id()) :: String.t()
-  defp files_with_map_results(reduce_idx) do
-    Path.wildcard("mr-map-inter-#{reduce_idx}-*")
   end
 
   @spec write_pairs(list({String.t(), String.t()}), File.io_device()) :: :ok

@@ -2,9 +2,8 @@ defmodule Mapreduce.Application do
   use Application
 
   @spec map(String.t(), File.io_device()) :: list({String.t(), String.t()})
-  defp map(_filename, file) do
-    file
-    |> IO.stream(:line)
+  defp map(_filename, stream) do
+    stream
     |> Enum.flat_map(&String.split(&1))
     |> Enum.map(fn w -> {w, "1"} end)
   end
