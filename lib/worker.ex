@@ -4,84 +4,84 @@ defmodule Worker do
   @type mapf :: (String.t(), File.io_device() -> list({String.t(), String.t()}))
   @type reducef :: (String.t(), list(String.t()) -> String.t())
 
-  @spec start_link(GenServer.name(), mapf(), reducef()) :: {:ok, pid()}
-  def start_link(coordinator_server, map, reduce) do
+  @spec start_link(Node.t(), GenServer.name(), mapf(), reducef()) :: {:ok, pid()}
+  def start_link(node, coordinator_server, map, reduce) do
     Logger.info("Worker: Spawned link")
-    pid = spawn_link(fn -> loop(coordinator_server, map, reduce) end)
+    pid = spawn_link(fn -> loop(node, coordinator_server, map, reduce) end)
     {:ok, pid}
   end
 
-  @spec loop(GenServer.name(), mapf(), reducef()) :: :ok
-  def loop(server, map, reduce) do
+  @spec loop(Node.t(), GenServer.name(), mapf(), reducef()) :: :ok
+  def loop(node, server, map, reduce) do
     Logger.info("Worker: probing coordinator for tasks")
-    reply = Coordinator.get_task(server)
+    reply = :rpc.call(node, Coordinator, :get_task, [server])
 
     case reply do
       {:map, task_id, filename, reduce_num} ->
-        handle_map(server, map, task_id, filename, reduce_num)
+        handle_map(node, server, map, task_id, filename, reduce_num)
 
       {:reduce, task_id, reduce_idx} ->
-        handle_reduce(server, reduce, task_id, reduce_idx)
+        handle_reduce(node, server, reduce, task_id, reduce_idx)
 
       {:no_task} ->
         :timer.sleep(1000)
     end
 
-    if Coordinator.done?(server) do
+    if :rpc.call(node, Coordinator, :done?, [server]) do
       Logger.info("Worker: Recieved done?=true, exiting")
       :ok
     else
-      loop(server, map, reduce)
+      loop(node, server, map, reduce)
     end
   end
 
-  @spec handle_map(GenServer.name(), mapf(), Coordinator.task_id(), String.t(), integer()) :: :ok
-  defp handle_map(server, map, task_id, filename, reduce_num) do
+  @spec handle_map(Node.t(), GenServer.name(), mapf(), Coordinator.task_id(), String.t(), integer()) :: :ok
+  defp handle_map(node, server, map, task_id, filename, reduce_num) do
     Logger.info("Worker: Handling map task (id=#{task_id})")
-    file = Coordinator.file_open(server, filename, [:read])
+    file = :rpc.call(node, Coordinator, :file_open, [server, filename, [:read]])
     map_pairs = map.(filename, IO.stream(file, :line))
-    Coordinator.file_close(server, file)
+    :rpc.call(node, Coordinator, :file_close, [server, file])
     buckets = split_into_buckets(map_pairs, reduce_num)
 
     buckets
     |> Enum.each(fn {reduce_idx, pairs} ->
       filename = Coordinator.filename_for_map_result(reduce_idx, task_id)
-      file = Coordinator.file_open(server, filename, [:write])
+      file = :rpc.call(node, Coordinator, :file_open, [server, filename, [:write]])
       write_pairs(pairs, file)
-      Coordinator.file_close(server, file)
+      :rpc.call(node, Coordinator, :file_close, [server, file])
     end)
 
     Logger.info("Worker: Completed map task (id=#{task_id})")
-    Coordinator.complete_task(server, task_id)
+    :rpc.call(node, Coordinator, :complete_task, [server, task_id])
   end
 
-  @spec handle_reduce(GenServer.name(), reducef(), Coordinator.task_id(), integer()) :: :ok
-  defp handle_reduce(server, reduce, task_id, reduce_idx) do
+  @spec handle_reduce(Node.t(), GenServer.name(), reducef(), Coordinator.task_id(), integer()) :: :ok
+  defp handle_reduce(node, server, reduce, task_id, reduce_idx) do
     Logger.info("Worker: Handling reduce task (id=#{task_id})")
-    filenames = Coordinator.filenames_with_map_results(server, reduce_idx)
+    filenames = :rpc.call(node, Coordinator, :filenames_with_map_results, [server, reduce_idx])
 
     # TODO: This can be optimized by sorting by key
     pairs =
       filenames
       |> Enum.map(fn filename ->
-        file = Coordinator.file_open(server, filename, [:read])
+        file = :rpc.call(node, Coordinator, :file_open, [server, filename, [:read]])
         pairs = read_pairs(file)
-        Coordinator.file_close(server, file)
+        :rpc.call(node, Coordinator, :file_close, [server, file])
         pairs
       end)
       |> flatten_pairs()
 
     outfile = Coordinator.file_for_output(reduce_idx)
-    file = Coordinator.file_open(server, outfile, [:write])
+    file = :rpc.call(node, Coordinator, :file_open, [server, outfile, [:write]])
 
     pairs
     |> Enum.map(fn {key, values} -> {key, reduce.(key, values)}end)
     |> write_result_to_file(file)
 
-    Coordinator.file_close(server, file)
+    :rpc.call(node, Coordinator, :file_close, [server, file])
 
     Logger.info("Worker: Completed reduce task (id=#{task_id})")
-    Coordinator.complete_task(server, task_id)
+    :rpc.call(node, Coordinator, :complete_task, [server, task_id])
   end
 
   @spec write_result_to_file(list({String.t(), String.t()}), File.io_device()) :: :ok

@@ -30,7 +30,7 @@ defmodule Mapreduce do
         1..Keyword.get(options, :workers_num),
         &%{
           id: {Worker, &1},
-          start: {Worker, :start_link, [{:global, :coordinator}, map, reduce]},
+          start: {Worker, :start_link, [Node.self(), {:global, :coordinator}, map, reduce]},
           restart: :transient
         }
       )

@@ -86,6 +86,7 @@ defmodule Coordinator do
       end
 
     case reply do
+      # TODO: Check that this actually works
       {:map, task_id, _} ->
         Process.send_after(self(), {:check_task_completed, task_id}, @worker_timeout)
 
@@ -165,6 +166,7 @@ defmodule Coordinator do
   @spec handle_info({:check_task_completed, task_id()}, Coordinator.t()) ::
           {:noreply, Coordinator.t()}
   def handle_info({:check_task_completed, task_id}, coordinator) do
+    Logger.info("Coordinator: checking if worker completed the task (id=#{task_id})")
     to_check = Enum.find(coordinator.tasks, &(&1.id == task_id))
 
     coordinator =
