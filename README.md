@@ -1,4 +1,4 @@
-> As description suggests, this is a very unfinished implementation of MapReduce, written in Elixir purely for educational purposes.
+> As description suggests, this is a very unpolished/rough (but working) implementation of MapReduce, written in Elixir purely for educational purposes.
 
 The idea to implement this came from the [MIT course on distributed systems](https://pdos.csail.mit.edu/6.824/)
 
