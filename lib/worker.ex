@@ -1,8 +1,8 @@
 defmodule Worker do
   require Logger
 
-  @type mapf :: (String.t(), File.io_device() -> list({String.t(), String.t()}))
-  @type reducef :: (String.t(), list(String.t()) -> String.t())
+  @type mapf :: (String.t(), File.io_device() -> [{String.t(), String.t()}])
+  @type reducef :: (String.t(), [String.t()] -> String.t())
 
   @spec start_link(Node.t(), GenServer.name(), mapf(), reducef()) :: {:ok, pid()}
   def start_link(node, coordinator_server, map, reduce) do
@@ -84,7 +84,7 @@ defmodule Worker do
     :rpc.call(node, Coordinator, :complete_task, [server, task_id])
   end
 
-  @spec write_result_to_file(list({String.t(), String.t()}), File.io_device()) :: :ok
+  @spec write_result_to_file([{String.t(), String.t()}], File.io_device()) :: :ok
   def write_result_to_file(pairs, file) do
     Enum.each(pairs, fn {key, value} ->
       IO.binwrite(file, "#{key} #{value}\n")
@@ -92,8 +92,8 @@ defmodule Worker do
     :ok
   end
 
-  @spec split_into_buckets(list({String.t(), String.t()}), integer()) :: %{
-          integer() => list({String.t(), String.t()})
+  @spec split_into_buckets([{String.t(), String.t()}], integer()) :: %{
+          integer() => [{String.t(), String.t()}]
         }
   defp split_into_buckets(pairs, reduce_num) do
     buckets =
@@ -118,19 +118,19 @@ defmodule Worker do
     number
   end
 
-  @spec write_pairs(list({String.t(), String.t()}), File.io_device()) :: :ok
+  @spec write_pairs([{String.t(), String.t()}], File.io_device()) :: :ok
   def write_pairs(pairs, file) do
     binary = :erlang.term_to_binary(pairs)
     IO.binwrite(file, binary)
   end
 
-  @spec read_pairs(File.io_device()) :: list({String.t(), String.t()})
+  @spec read_pairs(File.io_device()) :: [{String.t(), String.t()}]
   def read_pairs(file) do
     IO.binread(file, :all) |> :erlang.binary_to_term()
   end
 
-  @spec flatten_pairs(list(list({String.t(), String.t()}))) ::
-          list({String.t(), list(String.t())})
+  @spec flatten_pairs([[{String.t(), String.t()}]]) ::
+          [{String.t(), [String.t()]}]
   defp flatten_pairs(lists_of_pairs) do
     lists_of_pairs
     |> Enum.flat_map(& &1)

@@ -31,9 +31,9 @@ defmodule Coordinator do
   @type task_id() :: integer()
   @type task_status() :: :idle | :progress | :complete
   @type task() :: ReduceTask.t() | MapTask.t()
-  @type t() :: %Coordinator{tasks: list(task()), reduce_num: integer(), next_id: task_id()}
+  @type t() :: %Coordinator{tasks: [task()], reduce_num: integer(), next_id: task_id()}
 
-  @spec start_link(GenServer.name(), list(String.t())) :: GenServer.on_start()
+  @spec start_link(GenServer.name(), [String.t()]) :: GenServer.on_start()
   def start_link(name, files) do
     GenServer.start_link(__MODULE__, files, name: name)
   end
@@ -143,7 +143,7 @@ defmodule Coordinator do
   end
 
   @impl true
-  @spec handle_call({:file_open, String.t(), list(File.mode())}, any(), Coordinator.t()) :: {:reply, File.io_device(), Coordinator.t()}
+  @spec handle_call({:file_open, String.t(), [File.mode()]}, any(), Coordinator.t()) :: {:reply, File.io_device(), Coordinator.t()}
   def handle_call({:file_open, filename, modes}, _from, coordinator) do
     file = File.open!(filename, modes)
     {:reply, file, coordinator}
@@ -157,7 +157,7 @@ defmodule Coordinator do
   end
 
   @impl true
-  @spec handle_call({:map_results_filenames, integer()}, any(), Coordinator.t()) :: {:reply, list(String.t()), Coordinator.t()}
+  @spec handle_call({:map_results_filenames, integer()}, any(), Coordinator.t()) :: {:reply, [String.t()], Coordinator.t()}
   def handle_call({:map_results_filenames, reduce_idx}, _from, coordinator) do
     {:reply, Path.wildcard("mr-map-inter-#{reduce_idx}-*"), coordinator}
   end
@@ -208,7 +208,7 @@ defmodule Coordinator do
     GenServer.call(server, :done?)
   end
 
-  @spec file_open(GenServer.name(), String.t(), list(File.mode())) :: File.io_device()
+  @spec file_open(GenServer.name(), String.t(), [File.mode()]) :: File.io_device()
   def file_open(server, filename, modes) do
     GenServer.call(server, {:file_open, filename, modes})
   end
@@ -233,7 +233,7 @@ defmodule Coordinator do
     "mr-out-#{reduce_idx}"
   end
 
-  @spec with_map_tasks(Coordinator.t(), list(String.t())) :: Coordinator.t()
+  @spec with_map_tasks(Coordinator.t(), [String.t()]) :: Coordinator.t()
   defp with_map_tasks(coordinator, files) do
     map_tasks =
       files
@@ -280,7 +280,7 @@ defmodule Coordinator do
   defp is_reduce_task(%ReduceTask{}), do: true
   defp is_reduce_task(_), do: false
 
-  @spec set_task_status(list(task()), task_id(), task_status()) :: list(task())
+  @spec set_task_status([task()], task_id(), task_status()) :: [task()]
   defp set_task_status(tasks, task_id, new_status) do
     Enum.map(tasks, fn task ->
       case task do
