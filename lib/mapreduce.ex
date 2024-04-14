@@ -14,7 +14,6 @@ defmodule Mapreduce do
     :ok
   end
 
-  # TODO: Implement using nodes of processes under supervisor
   def under_supervisor(files, map, reduce, options \\ []) do
     defaults = [workers_num: 5, name: Mapreduce.Supervisor]
     options = Keyword.merge(defaults, options)
