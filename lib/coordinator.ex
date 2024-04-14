@@ -86,7 +86,6 @@ defmodule Coordinator do
       end
 
     case reply do
-      # TODO: Check that this actually works
       {:map, task_id, _} ->
         Process.send_after(self(), {:check_task_completed, task_id}, @worker_timeout)
 
@@ -189,7 +188,12 @@ defmodule Coordinator do
   @impl true
   @spec handle_info(:stop, Coordinator.t()) :: {:stop, :shutdown, Coordinator.t()}
   def handle_info(:stop, coordinator) do
-    Logger.info("Coordinator: Recieved handle_info(:stop), stopping")
+    Logger.info("Coordinator: Recieved handle_info(:stop), deleting intermediate files")
+    map_result_glob()
+    |> Path.wildcard()
+    |> Enum.each(&File.rm!(&1))
+
+    Logger.info("Coordinator: Stopping")
     {:stop, :shutdown, coordinator}
   end
 
@@ -226,6 +230,11 @@ defmodule Coordinator do
   @spec filename_for_map_result(integer(), Coordinator.task_id()) :: String.t()
   def filename_for_map_result(reduce_idx, task_id) do
     "mr-map-inter-#{reduce_idx}-#{task_id}"
+  end
+
+  @spec map_result_glob() :: String.t()
+  defp map_result_glob() do
+    "mr-map-inter-*"
   end
 
   @spec file_for_output(integer()) :: String.t()

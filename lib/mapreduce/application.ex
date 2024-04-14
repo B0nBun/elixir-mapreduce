@@ -8,7 +8,7 @@ defmodule Mapreduce.Application do
 
   @impl true
   def start(_type, _args) do
-    {type, coordinator_name, app_filename} = get_params()
+    {type, coordinator_name, app_filename, files_glob} = get_params()
     node = :"#{coordinator_name}"
     if type == :worker do
       case Node.connect(node) do
@@ -23,10 +23,9 @@ defmodule Mapreduce.Application do
 
     map = &Mapreduce.Callbacks.map(&1, &2)
     reduce = &Mapreduce.Callbacks.reduce(&1, &2)
-
     case type do
       :worker -> Worker.start_link(node, {:global, :coordinator}, map, reduce)
-      :coordinator -> Coordinator.start_link({:global, :coordinator}, Path.wildcard("texts/*"))
+      :coordinator -> Coordinator.start_link({:global, :coordinator}, Path.wildcard(files_glob))
     end
   end
 
@@ -49,6 +48,12 @@ defmodule Mapreduce.Application do
       {_, name} -> {:ok, name}
     end
 
-    {type, coordinator_name, app_filename}
+    {:ok, files_glob} = case {type, System.get_env("MR_FILES_GLOB")} do
+      {:coordinator, ""} -> {:error, @usage_message}
+      {:coordinator, nil} -> {:error, @usage_message}
+      {_, glob} -> {:ok, glob}
+    end
+
+    {type, coordinator_name, app_filename, files_glob}
   end
 end
